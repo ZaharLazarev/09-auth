@@ -4,17 +4,20 @@ import { register, RegisterParams } from "@/lib/api/clientApi";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AxiosError } from "axios";
+import { useAuthStore } from "@/lib/store/authStore";
 
 export type ApiError = AxiosError<{ error: string }>;
 
 export default function SignUpPage() {
   const [error, setError] = useState("");
   const router = useRouter();
+  const setUser = useAuthStore((s) => s.setUser);
   const handleSubmit = async (formData: FormData) => {
     try {
       const formValues = Object.fromEntries(formData) as RegisterParams;
       const res = await register(formValues);
       if (res) {
+        setUser(res);
         router.push("/profile");
       } else {
         setError("Invalid email or password");
