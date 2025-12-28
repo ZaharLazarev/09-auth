@@ -36,11 +36,12 @@ export default async function ProfilePage() {
         </div>
         <div className={css.avatarWrapper}>
           <Image
-            src="https://www.reshot.com/preview-assets/icons/EM8NS2L5GW/user-profile-EM8NS2L5GW.svg"
-            alt="User Avatar"
+            src={user.avatar || "/images/default-avatar.svg"}
+            alt={`${user.username} avatar`}
             width={120}
             height={120}
             className={css.avatar}
+            priority
           />
         </div>
         <div className={css.profileInfo}>

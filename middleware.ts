@@ -1,70 +1,65 @@
-import axios from "axios";
-import { parse } from "cookie";
-
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 
-const privateRoutes = ["/profile"];
+const PRIVATE_PREFIXES = ["/profile", "/notes"];
+const AUTH_PAGES = ["/sign-in", "/sign-up"];
+
+function isPathStartsWithAny(pathname: string, prefixes: string[]) {
+  return prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
 
 export async function middleware(request: NextRequest) {
-  const cookieStore = await cookies();
-
-  const accessToken = cookieStore.get("accessToken")?.value;
-  const refreshToken = cookieStore.get("refreshToken")?.value;
-
   const { pathname } = request.nextUrl;
 
-  const isPrivateRoute = privateRoutes.some((route) =>
-    pathname.startsWith(route)
-  );
+  const accessToken = request.cookies.get("accessToken")?.value;
+  const refreshToken = request.cookies.get("refreshToken")?.value;
 
-  if (isPrivateRoute) {
-    if (!accessToken) {
-      if (!refreshToken) {
-        return NextResponse.redirect(new URL("/login", request.url));
-      } else {
-        const response = await axios.get(
-          "https://next-v1-notes-api.goit.study/auth/session",
-          {
-            headers: {
-              Cookie: cookieStore.toString(),
-            },
-          }
-        );
+  const isPrivateRoute = isPathStartsWithAny(pathname, PRIVATE_PREFIXES);
+  const isAuthPage = AUTH_PAGES.includes(pathname);
 
-        const setCookie = response.headers["set-cookie"];
+  if (isAuthPage && accessToken) {
+    return NextResponse.redirect(new URL("/notes", request.url));
+  }
 
-        if (setCookie) {
-          const cookieArray = Array.isArray(setCookie)
-            ? setCookie
-            : [setCookie];
+  if (!isPrivateRoute) {
+    return NextResponse.next();
+  }
 
-          for (const cookie of cookieArray) {
-            const parsed = parse(cookie);
-            const options = {
-              expires: parsed.Expires ? new Date(parsed.Expires) : undefined,
-              path: parsed.Path,
-              maxAge: Number(parsed["Max-Age"]),
-            };
+  if (!accessToken) {
+    if (!refreshToken) {
+      return NextResponse.redirect(new URL("/sign-in", request.url));
+    }
 
-            if (parsed.accessToken) {
-              cookieStore.set("accessToken", parsed.accessToken, options);
-            }
+    try {
+      const cookieHeader = request.headers.get("cookie") ?? "";
 
-            if (parsed.refreshToken) {
-              cookieStore.set("refreshToken", parsed.refreshToken, options);
-            }
-          }
-        }
-
-        return NextResponse.next({
+      const apiRes = await fetch(
+        "https://next-v1-notes-api.goit.study/auth/session",
+        {
+          method: "GET",
           headers: {
-            Cookie: cookieStore.toString(),
+            cookie: cookieHeader,
           },
-        });
+        }
+      );
+
+      if (!apiRes.ok) {
+        const res = NextResponse.redirect(new URL("/sign-in", request.url));
+        res.cookies.delete("accessToken");
+        res.cookies.delete("refreshToken");
+        return res;
       }
-    } else {
-      return NextResponse.next();
+
+      const setCookie = apiRes.headers.get("set-cookie");
+
+      const res = NextResponse.next();
+
+      if (setCookie) {
+        res.headers.append("set-cookie", setCookie);
+      }
+
+      return res;
+    } catch {
+      return NextResponse.redirect(new URL("/sign-in", request.url));
     }
   }
 
@@ -72,5 +67,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matchers: ["/profile"],
+  matcher: ["/profile/:path*", "/notes/:path*", "/sign-in", "/sign-up"],
 };
